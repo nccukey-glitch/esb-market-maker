@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import streamlit as st
 import pandas as pd
 from datetime import datetime, date
@@ -11,19 +12,39 @@ from calculation.allocation import allocate_estimated_mm_pnl
 from data_fetcher.tpex import normalize_date
 from data_fetcher.broker import get_broker_name
 
+BASE_DIR = Path(__file__).resolve().parent
+
 def check_password() -> bool:
     """
-    Checks if password protection is enabled via Streamlit secrets or env var.
+    Checks if password protection is enabled via 密碼設定.txt, Streamlit secrets, or env var.
     If no password is set, allows direct access.
     """
     configured_pwd = None
-    try:
-        if "password" in st.secrets:
-            configured_pwd = str(st.secrets["password"])
-        elif "auth" in st.secrets and "password" in st.secrets["auth"]:
-            configured_pwd = str(st.secrets["auth"]["password"])
-    except Exception:
-        pass
+
+    # 1. Check direct visible text file first (super easy to edit in Finder)
+    for candidate in [
+        BASE_DIR / "密碼設定.txt",
+        BASE_DIR.parent / "密碼設定.txt",
+        BASE_DIR / "password.txt",
+    ]:
+        if candidate.exists():
+            try:
+                with open(candidate, "r", encoding="utf-8") as f:
+                    txt = f.read().strip()
+                    if txt:
+                        configured_pwd = txt
+                        break
+            except Exception:
+                pass
+
+    if not configured_pwd:
+        try:
+            if "password" in st.secrets:
+                configured_pwd = str(st.secrets["password"])
+            elif "auth" in st.secrets and "password" in st.secrets["auth"]:
+                configured_pwd = str(st.secrets["auth"]["password"])
+        except Exception:
+            pass
 
     if not configured_pwd:
         configured_pwd = os.environ.get("APP_PASSWORD", "")

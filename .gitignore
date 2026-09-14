@@ -8,3 +8,5 @@ __pycache__/
 database/esb.db
 raw_data/dss004_*.json
 scratch/
+密碼設定.txt
+password.txt
