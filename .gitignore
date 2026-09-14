@@ -5,3 +5,6 @@ __pycache__/
 .DS_Store
 .pytest_cache/
 .streamlit/secrets.toml
+database/esb.db
+raw_data/dss004_*.json
+scratch/
