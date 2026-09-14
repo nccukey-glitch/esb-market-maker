@@ -70,10 +70,28 @@ def clean_float(val: Any) -> Optional[float]:
     except ValueError:
         return None
 
+import time
+
+_tpex_session = None
+
+def get_tpex_session() -> requests.Session:
+    global _tpex_session
+    if _tpex_session is None:
+        _tpex_session = requests.Session()
+        _tpex_session.headers.update({
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+            "Accept": "application/json, text/javascript, */*; q=0.01",
+            "Accept-Language": "zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Referer": "https://www.tpex.org.tw/zh-tw/emerging/trading/broker-trades.html",
+            "X-Requested-With": "XMLHttpRequest",
+        })
+    return _tpex_session
+
 def fetch_daily_raw(trade_date: str, force_download: bool = False) -> dict:
     """
     Fetches raw daily report JSON from TPEx or cloud/local cache.
     Primary storage is Google Drive (ESM_DATE), with local mirror backup.
+    Includes 3-attempt retry with backoff for resilient connection handling.
     """
     api_date, file_date = normalize_date(trade_date)
     cache_file = RAW_DATA_DIR / f"dss004_{file_date}.json"
@@ -93,19 +111,26 @@ def fetch_daily_raw(trade_date: str, force_download: bool = False) -> dict:
             except Exception:
                 pass
 
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "application/json, text/javascript, */*; q=0.01",
-        "X-Requested-With": "XMLHttpRequest",
-    }
     params = {
         "date": api_date,
         "response": "json"
     }
 
-    resp = requests.get(TPEX_DSS004_URL, params=params, headers=headers, timeout=30)
-    resp.raise_for_status()
-    data = resp.json()
+    session = get_tpex_session()
+    last_err = None
+    data = None
+
+    for attempt in range(3):
+        try:
+            resp = session.get(TPEX_DSS004_URL, params=params, timeout=30)
+            resp.raise_for_status()
+            data = resp.json()
+            break
+        except Exception as e:
+            last_err = e
+            time.sleep(1.5 * (attempt + 1))
+    else:
+        raise RuntimeError(f"無法自櫃買中心取得 {api_date} 交易資料 (嘗試 3 次)：{last_err}")
 
     # Save to Google Drive cloud storage (Primary)
     try:

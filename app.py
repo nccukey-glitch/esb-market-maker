@@ -164,13 +164,18 @@ unit_label = "張" if "張" in unit_option else "股"
 
 st.sidebar.markdown("---")
 force_download = st.sidebar.checkbox("強制重新下載 (覆寫快取)", value=False)
-if st.sidebar.button("🔄 檢查並更新區間資料"):
+if st.sidebar.button("🔄 檢查並下載區間資料", use_container_width=True):
     with st.spinner(f"正在檢查/下載 {start_str} 至 {end_str} 市場資料..."):
         try:
             results = process_date_range(start_str, end_str, force_download=force_download)
             processed_days = [r for r in results if r["status"] == "ok"]
             cached_days = [r for r in results if r["status"] == "already_cached"]
-            st.sidebar.success(f"完成！新增處理 {len(processed_days)} 日，已快取 {len(cached_days)} 日。")
+            error_days = [r for r in results if r["status"] == "error"]
+            if error_days:
+                st.sidebar.warning(f"處理完成，但有 {len(error_days)} 日取得失敗。")
+            else:
+                st.sidebar.success(f"完成！新增下載 {len(processed_days)} 日，已快取 {len(cached_days)} 日。")
+            st.rerun()
         except Exception as e:
             st.sidebar.error(f"資料取得失敗：{e}")
 
@@ -181,6 +186,21 @@ broker_pnls = db.get_market_range_broker_pnls(start_file_date, end_file_date)
 # Determine distinct trading days count
 available_dates = [d for d in db.get_available_dates() if start_file_date <= d <= end_file_date]
 trading_days_count = len(available_dates)
+
+if trading_days_count == 0:
+    st.warning(f"⚠️ 資料庫中尚未有 {start_str} 至 {end_str} 的興櫃交易資料（或所選日期為非交易日）。")
+    if st.button(f"📥 立即自櫃買中心連線下載 {start_str} ~ {end_str} 資料並設算", type="primary"):
+        with st.spinner(f"正在連線櫃買中心下載並解析 {start_str} 至 {end_str} 交易資料..."):
+            try:
+                results = process_date_range(start_str, end_str, force_download=force_download)
+                processed_days = [r for r in results if r["status"] == "ok"]
+                if processed_days:
+                    st.success(f"下載成功！已自動處理並計算 {len(processed_days)} 個交易日資料。")
+                else:
+                    st.info("所選日期在櫃買中心無交易資料（可能為週末或國定假日）。")
+                st.rerun()
+            except Exception as e:
+                st.error(f"下載失敗：{e}")
 
 # ----------------- Navigation Tabs -----------------
 tab1, tab2, tab3, tab4 = st.tabs([
